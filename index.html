@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+	<style>
+		h1 {
+  			font-size:1.6em;
+  			text-align:center;
+  			font-family:tahoma;
+		}
+		h2 {
+  			font-size:1.4em;
+  			text-align:center;
+  			font-family:tahoma;
+		}
+		#content {
+  			width:100%;
+  			margin-left:auto;
+  			margin-right:auto;
+		}
+		#tooltip {	
+  			position: absolute;			
+  			text-align: center;			
+  			width: 100px;							       
+  			padding: 2px;				
+  			font: 12px sans-serif;		       
+  			background: gray;	
+  			border: 1px solid black;	
+  			border-radius: 4px;			
+  			color: white;
+  			opacity: 0;
+		}
+
+	</style>
+	<head>
+    			<title id="title">Monthly Global Land-Surface Temperature</title>
+    			<script defer src="https://cdn.freecodecamp.org/testable-projects-fcc/v1/bundle.js"></script>
+    			<script src="https://d3js.org/d3.v4.min.js"></script>
+  	</head>
+ 
+
+  
+
+	<body>
+		<div id="content"><h1>Monthly Global Land-Surface Temperature</h1>
+  
+		<h2 id="description"></h2>
+		<script>
+			var json;
+			var dataset;
+			var xScale=0;
+			var yScale=0;
+			var legendScale=0;
+			const svgWidth = "1600";
+			const svgHeight = "800";
+			const svg = d3.select("div")
+                  		.append("svg")
+                  		.attr("width",svgWidth)
+                  		.attr("height",svgHeight);
+			const tooltip = d3
+                  		.select("body")
+                  		.append("div")
+                  		.attr("id", "tooltip");
+                  
+			var padding = 140;
+			var lowestTemp=0;
+			document.addEventListener('DOMContentLoaded',function(){
+  				req=new XMLHttpRequest();
+  				req.open("GET",'https://raw.githubusercontent.com/freeCodeCamp/ProjectReferenceData/master/global-temperature.json',true);
+  				req.send();
+  				req.onload=function(){
+    					json=JSON.parse(req.responseText);
+					console.log(json);
+					lowestTemp=json.baseTemperature;
+    					dataset=json.monthlyVariance;
+    					drawGraph();
+  				}
+			});
+
+			function drawGraph() {
+				
+  				var barWidth = (svgWidth-2*padding)/(dataset.length/12);
+  				var yDataFormat="%M:%S";
+  				var xDataFormat="%Y";
+  				// use the above formats to parse the time data from the string data of the api (Time and Year)
+  				// For the x axis data (years), find the min year minus one and max year plus one to prevent data values intersecting with the y-axis
+  				var month=["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  				xScale = d3.scaleTime()
+  					.domain([d3.min(dataset, (d)=> {return d3.timeParse(xDataFormat)(d.year)}), d3.max(dataset, (d)=>{return d3.timeParse(xDataFormat)(d.year)})])
+  					.range([padding, svgWidth-padding]);
+  				yScale = d3.scaleBand()
+  					.domain(month)
+  					.range([padding, svgHeight-padding]);
+  				legendScale = d3.scaleLinear()
+  					.domain([d3.min(dataset, (d)=>d.variance+lowestTemp), d3.max(dataset, (d)=>d.variance+lowestTemp)])
+  					.range([0, 240]).nice();  //.nice makes the ends of the scale easier on the eye
+
+  				var xAxis = d3.axisBottom(xScale)
+                			.ticks(30)
+                			//.tickFormat(d3.format("d"));
+                			.tickFormat((d)=>{
+                  				return d3.timeFormat(xDataFormat)(d)
+                			});
+  				var yAxis = d3.axisLeft(yScale);
+  				var legendAxis = d3.axisBottom(legendScale)
+                			//.ticks(7)
+                			.tickSizeOuter(0)
+  				// our colour range, which will map data values to colours
+  				var colours = ["#2F9EEE", "#2FC8EE", "#2DD91A", "#CBF22C", "#F2CE2C", "#F06E1D", "#E61717"];
+				
+  				var colourRange = d3.scaleQuantile().domain([d3.min(dataset, (d)=>d.variance+lowestTemp),d3.max(dataset, (d)=>d.variance+lowestTemp)]).range(colours);
+				svg.append("g")
+      					.attr("id", "x-axis")
+      					.attr("transform", "translate(0, "+(svgHeight-padding)+")")
+      					.call(xAxis);
+  				svg.append("g")
+      					.attr("id", "y-axis")
+      					.attr("transform", "translate("+padding+", "+(0)+")")
+      					.call(yAxis)
+      
+  				svg.append("text")      // text label for the x axis
+        				.attr("x", svgWidth/2 )
+        				.attr("y",  svgHeight-2*(padding/3) )
+        				.style("text-anchor", "middle")
+        				.text("Year")
+					.style("font", "16px sans-serif");    
+  				svg.append("text")      // text label for the y axis
+        				.attr("x", padding/3 )
+        				.attr("y",  padding/2)
+        				.attr("dy", "0.5em")
+        				.style("text-anchor", "left")
+					.style("font", "16px sans-serif")
+        				.text("Month"); 
+  
+  				svg.selectAll("rect")
+        				.data(dataset)
+        				.enter()
+        				.append("rect")
+        				.attr("class", "cell")
+        				.attr("data-month", (d)=>{ return parseInt((d.month-1))})
+        				.attr("data-year", (d)=>{ return (d.year)})
+        				.attr("data-temp", (d)=>{ return (d.variance+lowestTemp) })
+        				.attr("fill", (d)=> {
+						return colourRange(d.variance+lowestTemp);
+       					})
+					.attr("x", padding)
+        				.attr("y", function(d, i) {
+            					return yScale(month[i%12]);
+        				})
+       
+        				.attr("height", function() {
+          					return (svgHeight-2*padding)/12;
+        				})
+        				.attr("width", function() {
+          					return barWidth;
+        				})
+        				.attr("transform", function (d, i) {
+             					var translate = [barWidth*Math.floor((i)/12), 0];
+             					return "translate("+ translate +")"
+        				})
+        				.on("mouseover", (d)=>{
+          					tooltip
+          						.html(month[d.month-1]+" "+d.year+"<br/>Variance: "+parseFloat(d.variance).toFixed(2)+"<br/>Temp: "+parseFloat(d.variance+lowestTemp).toFixed(2))
+          						.style("left", d3.event.pageX + 15+"px")
+          						.style("top", d3.event.pageY -30 + "px")
+          						.style("opacity", 0.9);
+          					tooltip
+							.attr("data-year", d.year);
+        				})
+        				.on("mouseout", () => {
+          					tooltip
+          						.style("opacity", 0)
+          						// setting pointer-events to none removes tooltip flicker/lack of tooltip responsiveness
+          						.style('pointer-events', 'none')
+        				});
+  					var legend = svg.append("g")
+        					.attr("id", "legend")
+        					.attr("transform", "translate("+padding+", "+(svgHeight-padding/2)+")")
+        					.text("Temperature");
+  					
+					let diff = d3.max(dataset, (d)=>d.variance+lowestTemp)-d3.min(dataset, (d)=>d.variance+lowestTemp);
+					for (let x=d3.min(dataset, (d)=>d.variance+lowestTemp); x<=d3.max(dataset, (d)=>d.variance+lowestTemp)-1; x+=1) {
+						console.log(d3.min(dataset, (d)=>d.variance+lowestTemp));
+						console.log(d3.max(dataset, (d)=>d.variance+lowestTemp));
+    						legend.append('rect')
+        						.attr('x', (240/Math.floor(diff))*(x-d3.min(dataset, (d)=>d.variance+lowestTemp)))
+        						.attr('width', 240/(Math.floor(diff)))
+        						.attr('height', 30)
+        						.attr("fill", colourRange(x));
+       
+  					}    
+  						legend.append("g")
+      							//.attr('x', 500)
+      							.attr("id", "legend-axis")
+      							.attr("transform", "translate("+0+", "+(30)+")")
+      							.call(legendAxis) 
+  
+  						d3.select("#description")
+      							.html("1753 - 2015: base temperature "+lowestTemp+"°C");
+					}
+		</script>
+	</body>
+	
+</html>
